@@ -92,4 +92,10 @@ memfd_create:
 ASM;
 
 
-file_put_contents("test.asm", $asm);
+file_put_contents($outputFile.".asm", $asm);
+$cmd = "nasm -felf64 ".escapeshellarg($outputFile.".asm")." -o ".escapeshellarg($outputFile.".o");
+echo $cmd."\n";
+shell_exec($cmd);
+$cmd = "ld ".escapeshellarg($outputFile.".o")." -o ".escapeshellarg($outputFile);
+echo $cmd."\n";
+shell_exec($cmd);
