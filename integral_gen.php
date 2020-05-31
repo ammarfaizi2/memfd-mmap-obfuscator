@@ -15,11 +15,22 @@ require __DIR__."/php/helpers.php";
 $inputFile = $argv[1];
 $outputFile = $argv[2];
 
+$handle = fopen($outputFile.".asm", "w");
+
 $elfFile = file_get_contents($inputFile);
 $fileSize = strlen($elfFile);
 
 $elfPos = $varPos = $elfRun = "";
+
+fwrite($handle, <<<ASM
+section .text
+global _start
+_start:
+
+ASM);
+
 $prologue = gen_prologue(
+  $handle,
   [$elfFile, str_repeat("\0", 1024), "/proc/self/fd/\0\0\0\0"], $elfPos, $varPos, $elfRun);
 
 
@@ -27,14 +38,8 @@ $memfd = $varPos;
 $argv  = "(".$varPos." + 8)";
 $envp  = "(".$varPos." + 16)";
 
-$asm = <<<ASM
+fwrite($handle, <<<ASM
 
-section .text
-global _start
-_start:
-  lea rdi, [rsp + 8]
-  lea rsi, [rsp + 24]
-{$prologue}
 _set_stack:
   mov [{$argv}], rdi
   mov [{$envp}], rsi
@@ -59,21 +64,50 @@ _set_stack:
   mov rdx, [{$envp}]
   syscall
 
+  mov rax, 3
+  mov rdi, [{$memfd}]
+  syscall
+
 exit:
   mov rax, 60
   xor rdi, rdi
   syscall
 
 itoa:
-  cmp rdi, 9
-  jl .less_than_10
-.less_than_10:
-  add dil, 48
-  mov byte [rsi], dil
+  push rbp
+  mov rbp, rsp
+  sub rsp, 32
+  xor rax, rax
+  mov [rbp - 32], rsi ; Store target buffer.
+  mov [rbp - 24], rax ; Clean up temporary buffer.
+  lea rsi, [rbp - 24 + 16] ; Set rsi with temporary buffer address.
+  xor r9, r9
+  mov rax, rdi ; Move the number to rax.
+  mov rcx, 10  ; Base 10.
+.itoa_loop_1:
+  dec rsi
+  xor rdx, rdx ; Clean up rdx.
+  div rcx
+  add dl, 48
+  mov [rsi], dl
+  inc r9
+  test rax, rax
+  jnz .itoa_loop_1
+  mov [rbp - 8], r9  ; Store string length.
+  mov rdi, [rbp - 32]
+.itoa_loop_2:
+  mov al, [rsi]
+  mov [rdi], al
+  dec r9
+  inc rdi
   inc rsi
-  jmp .epilogue
-.epilogue:
-  mov byte [rsi], 0
+  test r9, r9
+  jnz .itoa_loop_2
+  xor al, al
+  mov [rdi], al
+  mov rax, [rbp - 8]
+  mov rsp, rbp
+  pop rbp
   ret
 
 memfd_create:
@@ -89,10 +123,10 @@ memfd_create:
   pop rbp
   ret
 
-ASM;
+ASM);
 
 
-file_put_contents($outputFile.".asm", $asm);
+fclose($handle);
 $cmd = "nasm -felf64 ".escapeshellarg($outputFile.".asm")." -o ".escapeshellarg($outputFile.".o");
 echo $cmd."\n";
 shell_exec($cmd);
