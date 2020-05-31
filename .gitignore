@@ -1,0 +1,11 @@
+*.o
+*.so
+*.swo
+*.swp
+*.log
+*.tmp
+*.lock
+*.dump
+/layer1
+/layer2
+/.phpintel/
