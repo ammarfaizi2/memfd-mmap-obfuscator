@@ -23,7 +23,7 @@ $fileSize = strlen($elfFile);
 $elfPos = $varPos = $elfRun = "";
 
 fwrite($handle, <<<ASM
-section .text
+section .data
 global _start
 _start:
 

@@ -1,5 +1,5 @@
 
-section .text
+section .data
 global _start
 _start:
   push rbp
