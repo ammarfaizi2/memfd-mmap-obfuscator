@@ -99,7 +99,7 @@ ASM;
 
 fwrite($handle, <<<ASM
 
-section .text
+section .data
 global _start
 _start:
 {$asm}
