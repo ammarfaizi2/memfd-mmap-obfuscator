@@ -10,6 +10,8 @@ if ($argc !== 3) {
   exit(1);
 }
 
+$storeType = "stack";
+
 require __DIR__."/php/helpers.php";
 
 $inputFile = $argv[1];
@@ -17,7 +19,7 @@ $outputFile = $argv[2];
 
 $handle = fopen($outputFile, "w");
 
-$key = "123123123123";
+$key = rstr(1000);
 $textFile = file_get_contents($inputFile);
 
 $len = strlen($textFile);
@@ -28,61 +30,79 @@ for ($i = 0; $i < $len; $i++) {
   $textFile[$i] = chr(ord($textFile[$i]) ^ ord($key[$i % $keyLen]));
 }
 
-// /**
-//  * Write text data.
-//  */
-// $c = ord($textFile[0]);
-// fwrite($handle, <<<ASM
-// section .rodata
-//   __rtext_pt_dt db {$c}
-// ASM);
-// unset($textFile[0]);
-// $buff = "";
-// $j = 0;
-// foreach ($textFile as $v) {
-//   $buff .= ",".ord($v);
-//   if (($j % 10000) === 0) {
-//     fwrite($handle, $buff);
-//     $buff = "";
-//   }
-// }
-// if ($buff != "") {
-//   fwrite($handle, $buff);
-//   unset($buff);
-// }
+if ($storeType === "stack") {
+  $asm = "";
+  $var = gen_prologue_pt([$textFile, $key], $asm);
+  $loadTextandKey = <<<ASM
+  lea rdi, [{$var[0]}]
+  lea rsi, [{$var[1]}]
+ASM;
+} else {
+  /**
+   * Write text data.
+   */
+  $textFile = str_split($textFile);
+  $key = str_split($key);
+  $c = ord($textFile[0]);
+  fwrite($handle, <<<ASM
+  section .rodata
+    __rtext_pt_dt db {$c}
+  ASM);
+  unset($textFile[0]);
+  $buff = "";
+  $j = 0;
+  foreach ($textFile as $v) {
+    $buff .= ",".ord($v);
+    if (($j % 10000) === 0) {
+      fwrite($handle, $buff);
+      $buff = "";
+    }
+  }
+  if ($buff != "") {
+    fwrite($handle, $buff);
+    unset($buff);
+  }
 
-// /**
-//  * Write key data.
-//  */
-// $c = ord($key[0]);
-// fwrite($handle, <<<ASM
+  /**
+   * Write key data.
+   */
+  $c = ord($key[0]);
+  fwrite($handle, <<<ASM
 
-//   __rkey_pt_dt db {$c}
-// ASM);
-// unset($key[0]);
-// $buff = "";
-// $j = 0;
-// foreach ($key as $v) {
-//   $buff .= ",".ord($v);
-//   if (($j % 10000) === 0) {
-//     fwrite($handle, $buff);
-//     $buff = "";
-//   }
-// }
-// if ($buff != "") {
-//   fwrite($handle, $buff);
-//   unset($buff);
-// }
+    __rkey_pt_dt db {$c}
+  ASM);
+  unset($key[0]);
+  $buff = "";
+  $j = 0;
+  foreach ($key as $v) {
+    $buff .= ",".ord($v);
+    if (($j % 10000) === 0) {
+      fwrite($handle, $buff);
+      $buff = "";
+    }
+  }
+  if ($buff != "") {
+    fwrite($handle, $buff);
+    unset($buff);
+  }
+  $asm = <<<ASM
+  push rbp
+  sub rbp, rsp
+ASM;
+  $loadTextandKey = <<<ASM
+  mov rdi, __rtext_pt_dt
+  mov rsi, __rkey_pt_dt
+ASM;
 
-$asm = "";
-$var = gen_prologue_pt([$textFile, $key], $asm);
+}
+
 
 fwrite($handle, <<<ASM
 
 section .text
 global _start
 _start:
-  {$asm}
+{$asm}
   mov rax, 9
   mov rsi, {$len}
   xor rdi, rdi
@@ -94,12 +114,10 @@ _start:
   mov rbx, 0x22
   syscall
   mov r10, rax
-  ;mov rdi, __rtext_pt_dt
-  ;mov rsi, __rkey_pt_dt
-  lea rdi, [{$var[0]}]
-  lea rsi, [{$var[1]}]
+{$loadTextandKey}
   xor rcx, rcx
   mov r11, {$keyLen}
+
 _decrypt:
   xor rdx, rdx
   mov rax, rcx
@@ -111,7 +129,6 @@ _decrypt:
   inc rcx
   cmp rcx, {$len}
   jl _decrypt
-_jmp:
   lea rdi, [rbp + 16]
   lea rsi, [rbp + 24]
   jmp r10
