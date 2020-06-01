@@ -1,4 +1,7 @@
 
+section .rodata
+  qwe db 1,2,3,4,
+
 section .data
 global _start
 _start:
